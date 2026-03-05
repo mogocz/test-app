@@ -10,11 +10,10 @@ if st.button("pozdrav Mě hned"):
     st.write(f"Ahoj, {name} 👋")
 
 
-from pathlib import Path
 
-Path("data").mkdir(exist_ok=True)
-Path("data/pozdrav.txt").write_text("Ahoj!", encoding="utf-8")
-text = Path("data/pozdrav.txt").read_text(encoding="utf-8")
-print(text)
+import streamlit as st
 
-
+uploaded = st.file_uploader("Nahraj soubor", type=["txt", "csv"])
+if uploaded is not None:
+    data = uploaded.read()   # bytes [8](https://deepwiki.com/streamlit/streamlit/10-file-handling-and-uploads)
+    st.write("Velikost:", len(data), "B")
