@@ -1,0 +1,8 @@
+
+import streamlit as st
+
+st.title("Moje první webová apka")
+
+name = st.text_input("Jak se jmenuješ?")
+if st.button("aaaa"):
+    st.write(f"Ahoj, {name} 👋")
