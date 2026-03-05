@@ -41,9 +41,11 @@ st.title("Vyber soubor z Google Drive a ulož odkaz")
 # Po OAuth flow musíš mít access token (komponenta očekává token). [9](https://github.com/LounesAl/streamlit-google-picker)[8](https://pypi.org/project/streamlit-google-picker/)
 token = st.session_state.get("token", {}).get("access_token")
 
-CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
-API_KEY = os.environ.get("GOOGLE_API_KEY")
-APP_ID = CLIENT_ID.split("-")[0]  # v příkladech komponenty [9](https://github.com/LounesAl/streamlit-google-picker)[8](https://pypi.org/project/streamlit-google-picker/)
+CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+API_KEY  = st.secrets["GOOGLE_API_KEY"]
+
+APP_ID = CLIENT_ID.split("-")[0]
+  # v příkladech komponenty [9](https://github.com/LounesAl/streamlit-google-picker)[8](https://pypi.org/project/streamlit-google-picker/)
 
 if not token:
     st.warning("Nejprve dokonči OAuth přihlášení (musíš mít access_token ve session_state).")
