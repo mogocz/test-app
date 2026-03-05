@@ -1,172 +1,177 @@
 
 import json
+import os
+from urllib.parse import urlencode
+
+import requests
 import streamlit as st
-import streamlit.components.v1 as components
+from streamlit_google_picker import google_picker
 
-st.set_page_config(page_title="Google Drive Picker", layout="centered")
-st.title("Vybrat soubor z Google Drive a uložit odkaz")
+st.set_page_config(page_title="Google Drive Picker – uložit odkaz", layout="centered")
 
-# --- kontrola secrets ---
-required = ["GOOGLE_CLIENT_ID", "GOOGLE_API_KEY", "GOOGLE_APP_ID"]
-missing = [k for k in required if k not in st.secrets]
+# ----------------------------
+# 0) Ověření secrets
+# ----------------------------
+REQUIRED_SECRETS = [
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_API_KEY",
+    "GOOGLE_APP_ID",
+]
+
+missing = [k for k in REQUIRED_SECRETS if k not in st.secrets]
 if missing:
-    st.error(f"Chybí secrets: {', '.join(missing)}")
+    st.error(
+        "Chybí secrets: "
+        + ", ".join(missing)
+        + "\n\nOtevři Streamlit Cloud → Manage app → Secrets a doplň je."
+    )
     st.stop()
 
 CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
 API_KEY = st.secrets["GOOGLE_API_KEY"]
-APP_ID = st.secrets["GOOGLE_APP_ID"]
+APP_ID = str(st.secrets["GOOGLE_APP_ID"])  # u tebe project number: 364300237799
 
-# --- 1) přečti návrat z pickeru (query params) ---
-qp = st.query_params
-if "fileId" in qp and "name" in qp:
-    file_id = qp["fileId"]
-    name = qp["name"]
+# Streamlit Cloud redirect endpoint (používá se pro OAuth návrat)
+REDIRECT_URI = "https://share.streamlit.io/component/redirect"
 
-    st.session_state.setdefault("saved_files", [])
-    # neukládej duplicity
-    if not any(x["fileId"] == file_id for x in st.session_state["saved_files"]):
-        st.session_state["saved_files"].append({"name": name, "fileId": file_id})
+# Scope stačí pro výběr souboru a uložení ID/linku (metadata)
+SCOPES = "https://www.googleapis.com/auth/drive.metadata.readonly"
 
-    # vyčisti URL, ať se to nepřidává znovu po refreshi
-    st.query_params.clear()
+SAVE_PATH = "saved_drive_links.json"
 
-    st.success(f"Uloženo: {name}")
 
-# --- 2) UI: tlačítko otevře picker (běží v HTML/JS) ---
-st.markdown("### 1) Klikni na tlačítko a vyber soubor")
-st.markdown("Pozn.: Přihlašování proběhne v modálním okně od Googlu (GIS), bez serverového OAuth.")
+# ----------------------------
+# 1) Pomocné funkce – persist
+# ----------------------------
+def load_saved():
+    if os.path.exists(SAVE_PATH):
+        try:
+            with open(SAVE_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
 
-# Doporučení: minimal scope.
-# Oficiální sample používá drive.metadata.readonly. [1](https://developers.google.com/workspace/drive/picker/guides/sample)
-# Pro lepší bezpečnost se často doporučuje drive.file (omezuje přístup na soubory otevřené přes picker). [3](https://dev.to/googleworkspace/secure-google-drive-picker-token-best-practices-43al)
-SCOPE = "https://www.googleapis.com/auth/drive.file"
 
-html = f"""
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8"/>
-    <style>
-      body {{ font-family: sans-serif; }}
-      button {{
-        padding: 10px 14px; border: 0; border-radius: 8px;
-        background: #1a73e8; color: white; cursor: pointer;
-      }}
-      button:disabled {{ background: #999; cursor: not-allowed; }}
-      .hint {{ margin-top: 10px; color: #555; }}
-    </style>
-  </head>
-  <body>
-    <button id="pickBtn" disabled>Vybrat z Google Drive</button>
-    <div class="hint" id="status">Načítám Google knihovny…</div>
+def save_item(item):
+    saved = load_saved()
+    saved.append(item)
+    with open(SAVE_PATH, "w", encoding="utf-8") as f:
+        json.dump(saved, f, ensure_ascii=False, indent=2)
 
-    <script>
-      const SCOPES = "{SCOPE}";
-      const CLIENT_ID = "{CLIENT_ID}";
-      const API_KEY = "{API_KEY}";
-      const APP_ID = "{APP_ID}";
 
-      let tokenClient;
-      let accessToken = null;
-      let pickerInited = false;
-      let gisInited = false;
+# ----------------------------
+# 2) OAuth – login URL
+# ----------------------------
+def build_login_url():
+    params = {
+        "client_id": CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "response_type": "code",
+        "scope": SCOPES,
+        "access_type": "online",
+        "prompt": "consent",
+    }
+    return "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
 
-      function maybeEnable() {{
-        if (pickerInited && gisInited) {{
-          document.getElementById("pickBtn").disabled = false;
-          document.getElementById("status").textContent = "Připraveno. Klikni na tlačítko.";
-        }}
-      }}
 
-      // z oficiálního vzoru: gapi.load('client:picker', ...) a GIS token client [1](https://developers.google.com/workspace/drive/picker/guides/sample)
-      function gapiLoaded() {{
-        gapi.load('client:picker', async () => {{
-          await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/drive/v3/rest');
-          pickerInited = true;
-          maybeEnable();
-        }});
-      }}
-
-      function gisLoaded() {{
-        tokenClient = google.accounts.oauth2.initTokenClient({{
-          client_id: CLIENT_ID,
-          scope: SCOPES,
-          callback: (resp) => {{
-            if (resp.error) {{
-              document.getElementById("status").textContent = "OAuth chyba: " + resp.error;
-              return;
-            }}
-            accessToken = resp.access_token;
-            createPicker();
-          }}
-        }});
-        gisInited = true;
-        maybeEnable();
-      }}
-
-      function createPicker() {{
-        if (!accessToken) return;
-
-        const view = new google.picker.DocsView()
-          .setIncludeFolders(true);
-
-        const picker = new google.picker.PickerBuilder()
-          .setDeveloperKey(API_KEY)
-          .setAppId(APP_ID)
-          .setOAuthToken(accessToken)
-          .addView(view)
-          .setCallback(pickerCallback)
-          .build();
-
-        picker.setVisible(true);
-      }}
-
-      function pickerCallback(data) {{
-        if (data.action === google.picker.Action.PICKED) {{
-          const doc = data.docs[0];
-          const fileId = doc.id;
-          const name = doc.name || doc.title || "soubor";
-
-          // Pošli výsledek zpět do Streamlitu přes query string
-          const base = window.location.origin + window.location.pathname;
-          const url = base + "?fileId=" + encodeURIComponent(fileId) + "&name=" + encodeURIComponent(name);
-          window.location.href = url;
-        }}
-      }}
-
-      document.getElementById("pickBtn").addEventListener("click", () => {{
-        document.getElementById("status").textContent = "Otevírám přihlášení / picker…";
-        tokenClient.requestAccessToken({{ prompt: 'consent' }});
-      }});
-    </script>
-
-    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
-    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
-  </body>
-</html>
-"""
-
-components.html(html, height=140)
-
-# --- 3) Zobrazení uložených položek + odkaz pro otevření ---
-st.markdown("### 2) Uložené soubory")
-saved = st.session_state.get("saved_files", [])
-
-if not saved:
-    st.info("Zatím nic uloženého.")
-else:
-    for item in saved:
-        file_id = item["fileId"]
-        name = item["name"]
-        # praktický odkaz pro otevření v Drive UI
-        link = f"https://drive.google.com/file/d/{file_id}/view"
-        st.markdown(f"- **{name}** — {link}")
-
-    # volitelné: export do JSON (na Streamlit Cloud je disk dočasný, ale pro test ok)
-    st.download_button(
-        "Stáhnout uložené odkazy (JSON)",
-        data=json.dumps(saved, ensure_ascii=False, indent=2),
-        file_name="saved_drive_files.json",
-        mime="application/json",
+def exchange_code_for_token(code: str) -> dict:
+    resp = requests.post(
+        "https://oauth2.googleapis.com/token",
+        data={
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": REDIRECT_URI,
+        },
+        timeout=30,
     )
+    return resp.json()
+
+
+# ----------------------------
+# 3) UI
+# ----------------------------
+st.title("📎 Vyber soubor z Google Drive a ulož odkaz")
+
+st.caption(
+    "Cíl: vybrat soubor, uložit jeho `fileId` + odkaz pro pozdější otevření (bez uploadu)."
+)
+
+# 3a) Pokud se vrátíme z OAuth s ?code=...
+qp = st.query_params
+if "code" in qp and "token" not in st.session_state:
+    code = qp["code"]
+    token_data = exchange_code_for_token(code)
+
+    # Uložit token do session
+    if "access_token" in token_data:
+        st.session_state["token"] = token_data
+        st.success("✅ Přihlášení ke Google úspěšné.")
+        # uklidit URL parametry
+        st.query_params.clear()
+    else:
+        st.error(f"OAuth selhal: {token_data}")
+        st.stop()
+
+# 3b) Pokud nejsme přihlášení, nabídneme login link
+if "token" not in st.session_state:
+    st.warning("Nejprve je potřeba přihlásit se ke Google účtu.")
+    login_url = build_login_url()
+    st.markdown(f"👉 Přihlásit se ke Google\n\n{login_url}")
+    st.stop()
+
+# 3c) Máme token → můžeme otevřít Picker
+access_token = st.session_state["token"]["access_token"]
+
+st.subheader("1) Vybrat soubor")
+picked = google_picker(
+    label="Otevřít Google Drive Picker",
+    token=access_token,
+    apiKey=API_KEY,
+    appId=APP_ID,
+    accept_multiple_files=False,
+    key="gdrive_picker",
+)
+
+if picked:
+    # streamlit-google-picker vrací objekt podobný UploadedFile; některé verze nesou i ID,
+    # ale pro jistotu vytáhneme fileId z atributů, pokud existuje.
+    file_id = getattr(picked, "id", None) or getattr(picked, "file_id", None)
+    file_name = getattr(picked, "name", None) or getattr(picked, "title", None) or "Bez názvu"
+
+    # Pokud komponenta file_id neposkytne, aspoň uložíme název a dáme instrukci.
+    if not file_id:
+        st.error(
+            "Nepodařilo se zjistit fileId z objektu pickeru (záleží na verzi komponenty). "
+            "Zkus aktualizovat streamlit-google-picker nebo mi sem pošli `st.write(picked)` výstup."
+        )
+    else:
+        # Praktický link pro otevření v Drive UI:
+        view_url = f"https://drive.google.com/file/d/{file_id}/view"
+
+        item = {"name": file_name, "fileId": file_id, "url": view_url}
+        save_item(item)
+
+        st.success("✅ Uloženo!")
+        st.write("Název:", file_name)
+        st.write("File ID:", file_id)
+        st.markdown(f"🔗 Odkaz: {view_url}")
+
+st.divider()
+
+st.subheader("2) Uložené položky")
+saved = load_saved()
+if not saved:
+    st.info("Zatím nemáš uložené žádné soubory.")
+else:
+    for i, it in enumerate(saved, start=1):
+        st.write(f"{i}. {it.get('name','(bez názvu)')}")
+        st.code(it.get("fileId", ""), language="text")
+        url = it.get("url")
+        if url:
+            st.markdown(f"{url}")
+        st.write("---")
