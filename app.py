@@ -31,13 +31,51 @@ if url:
     st.link_button(label, url)  # label je proměnná [1](https://docs.streamlit.io/develop/api-reference/widgets/st.link_button)
 
 
+
+import os, json
 import streamlit as st
+from streamlit_google_picker import google_picker
 
-st.title("Výběr souboru")
+st.title("Vyber soubor z Google Drive a ulož odkaz")
 
-uploaded_file = st.file_uploader("Vyber soubor")
+# Po OAuth flow musíš mít access token (komponenta očekává token). [9](https://github.com/LounesAl/streamlit-google-picker)[8](https://pypi.org/project/streamlit-google-picker/)
+token = st.session_state.get("token", {}).get("access_token")
 
-if uploaded_file:
-    st.write("Název:", uploaded_file.name)
-    st.write("Velikost:", uploaded_file.size)
+CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+API_KEY = os.environ.get("GOOGLE_API_KEY")
+APP_ID = CLIENT_ID.split("-")[0]  # v příkladech komponenty [9](https://github.com/LounesAl/streamlit-google-picker)[8](https://pypi.org/project/streamlit-google-picker/)
 
+if not token:
+    st.warning("Nejprve dokonči OAuth přihlášení (musíš mít access_token ve session_state).")
+else:
+    picked = google_picker(
+        label="Vybrat z Google Drive",
+        token=token,
+        apiKey=API_KEY,
+        appId=APP_ID,
+        accept_multiple_files=False,
+        key="gpicker",
+    )
+
+    if picked:
+        # picked je 'UploadedFile'-like objekt (má .name, .size_bytes). [8](https://pypi.org/project/streamlit-google-picker/)[9](https://github.com/LounesAl/streamlit-google-picker)
+        # ID/link – záleží na tom, co komponenta vrací v objektu ve tvé verzi.
+        # Nejrobustnější je ukládat fileId (pokud je dostupné) a link si vždy dopočítat / načíst přes API.
+
+        record = {
+            "name": getattr(picked, "name", None),
+            "size_bytes": getattr(picked, "size_bytes", None),
+            "file_id": getattr(picked, "id", None) or getattr(picked, "file_id", None),
+        }
+
+        st.session_state.setdefault("saved", []).append(record)
+
+        # uložit do JSON souboru (jednoduché, bez DB)
+        with open("saved_drive_links.json", "w", encoding="utf-8") as f:
+            json.dump(st.session_state["saved"], f, ensure_ascii=False, indent=2)
+
+        st.success("Uloženo!")
+        st.json(record)
+
+st.subheader("Uložené položky")
+st.json(st.session_state.get("saved", []))
