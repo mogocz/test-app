@@ -31,31 +31,13 @@ if url:
     st.link_button(label, url)  # label je proměnná [1](https://docs.streamlit.io/develop/api-reference/widgets/st.link_button)
 
 
-from flask import Flask
+import streamlit as st
 
-app = Flask(__name__)
+st.title("Výběr souboru")
 
-@app.route("/")
-def index():
-    return """
-    <!doctype html>
-    <html>
-    <body>
+uploaded_file = st.file_uploader("Vyber soubor")
 
-    <input type="file" id="realFile" hidden>
-    <button onclick="document.getElementById('realFile').click()">
-        Vybrat soubor
-    </button>
-
-    <script>
-      document.getElementById("realFile").addEventListener("change", e => {
-        alert("Vybrán soubor: " + e.target.files[0].name);
-      });
-    </script>
-
-    </body>
-    </html>
-    """
-
-app.run(debug=True)
+if uploaded_file:
+    st.write("Název:", uploaded_file.name)
+    st.write("Velikost:", uploaded_file.size)
 
