@@ -19,4 +19,4 @@ if uploaded is not None:
     with open(uploaded.name, "wb") as f:
         f.write(uploaded.read())
 
-st.markdown("[Otevřít soubor](https://drive.google.com/file/d/1YmUETQCNLsxvRr1rdYal_GuBGaz6qvcZ/view?usp=sharing)")
+st.markdown("[A025552378N0204](https://drive.google.com/file/d/1YmUETQCNLsxvRr1rdYal_GuBGaz6qvcZ/view?usp=sharing)")
