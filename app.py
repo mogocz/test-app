@@ -1,7 +1,7 @@
 
 import streamlit as st
 
-st.title("This is a title")
+st.title("This is a title A")
 st.title("_Streamlit_ is :blue[cool] :sunglasses:")
 st.title("Moje první webová apka")
 
