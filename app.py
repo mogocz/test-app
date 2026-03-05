@@ -1,4 +1,59 @@
 
+
+import streamlit as st
+import requests
+from urllib.parse import urlencode
+
+# ---- OAuth config ----
+CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
+
+REDIRECT_URI = "https://share.streamlit.io/component/redirect"
+SCOPES = "https://www.googleapis.com/auth/drive.metadata.readonly"
+
+# ---- OAuth flow ----
+def get_login_url():
+    params = {
+        "client_id": CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "response_type": "code",
+        "scope": SCOPES,
+        "access_type": "online",
+        "prompt": "consent",
+    }
+    return "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
+
+# ---- Handle redirect ----
+query_params = st.query_params
+if "code" in query_params and "token" not in st.session_state:
+    code = query_params["code"]
+
+    token_resp = requests.post(
+        "https://oauth2.googleapis.com/token",
+        data={
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": REDIRECT_URI,
+        },
+    ).json()
+
+    st.session_state["token"] = token_resp
+    st.query_params.clear()
+    st.success("✅ Přihlášení ke Google úspěšné")
+
+# ---- Login UI ----
+if "token" not in st.session_state:
+    st.markdown("### Přihlášení ke Google")
+    st.markdown(
+        f'<a href="{get_login_url()}">👉 Přihlásit se ke Google</a>',
+        unsafe_allow_html=True,
+    )
+    st.stop()
+``
+
+
 import streamlit as st
 
 st.title("This is a title A")
