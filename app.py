@@ -30,15 +30,32 @@ label = st.text_input("Text odkazu", value="Otevřít soubor")
 if url:
     st.link_button(label, url)  # label je proměnná [1](https://docs.streamlit.io/develop/api-reference/widgets/st.link_button)
 
-<input type="file" id="realFile" hidden>
-<button onclick="document.getElementById('realFile').click()">
-  Vybrat soubor
-</button>
-<span id="name"></span>
 
-<script>
-document.getElementById("realFile").addEventListener("change", e => {
-  document.getElementById("name").textContent =
-    e.target.files[0]?.name ?? "";
-});
-</script>
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route("/")
+def index():
+    return """
+    <!doctype html>
+    <html>
+    <body>
+
+    <input type="file" id="realFile" hidden>
+    <button onclick="document.getElementById('realFile').click()">
+        Vybrat soubor
+    </button>
+
+    <script>
+      document.getElementById("realFile").addEventListener("change", e => {
+        alert("Vybrán soubor: " + e.target.files[0].name);
+      });
+    </script>
+
+    </body>
+    </html>
+    """
+
+app.run(debug=True)
+
