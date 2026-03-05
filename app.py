@@ -22,19 +22,10 @@ if uploaded is not None:
 st.markdown("[A025552378N0204](https://drive.google.com/file/d/1YmUETQCNLsxvRr1rdYal_GuBGaz6qvcZ/view?usp=sharing)")
 
 
-import re
-import requests
+import streamlit as st
 
-file_id = "1YmUETQCNLsxvRr1rdYal_GuBGaz6qvcZ"
-url = "https://drive.google.com/uc?export=download"
+url = st.text_input("URL", value="https://drive.google.com/file/d/1YmUETQCNLsxvRr1rdYal_GuBGaz6qvcZ/view?usp=sharing")
+label = st.text_input("Text odkazu", value="Otevřít soubor")
 
-r = requests.get(url, params={"id": file_id}, stream=True, allow_redirects=True)
-
-cd = r.headers.get("Content-Disposition", "")
-m = re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)"?', cd)
-if m:
-    print("Filename:", m.group(1))
-else:
-    print("Filename not found in headers (maybe needs confirmation token or is not public).")
-
-st.title("Moje první webová apka")
+if url:
+    st.link_button(label, url)  # label je proměnná [1](https://docs.streamlit.io/develop/api-reference/widgets/st.link_button)
