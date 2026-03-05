@@ -31,7 +31,6 @@ if url:
     st.link_button(label, url)  # label je proměnná [1](https://docs.streamlit.io/develop/api-reference/widgets/st.link_button)
 
 
-
 import os, json
 import streamlit as st
 from streamlit_google_picker import google_picker
@@ -81,3 +80,7 @@ else:
 
 st.subheader("Uložené položky")
 st.json(st.session_state.get("saved", []))
+
+
+st.write("CLIENT_ID OK:", CLIENT_ID[:10])
+st.write("APP_ID:", APP_ID)
