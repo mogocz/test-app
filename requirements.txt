@@ -1,3 +1,6 @@
 
 streamlit
 streamlit-google-picker
+google-auth
+google-auth-oauthlib
+requests
